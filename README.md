@@ -18,7 +18,7 @@ Numerics and plotting:
 
     pip install numpy scipy networkx matplotlib jax
 
-Group theory (automorphism groups, stabilizers, orbits, character tables) is delegated to GAP through the SageMath interface, installed from the modular [passagemath](https://passagemath.org) distribution; no full Sage install is needed:
+Group theory (automorphism groups, stabilizers, orbits, character tables) carried out by GAP through the SageMath interface, installed from the modular [passagemath](https://passagemath.org) distribution; no full Sage install is needed:
 
     pip install passagemath-gap passagemath-graphs passagemath-modules passagemath-flint passagemath-pari
 
