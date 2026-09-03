@@ -25,6 +25,7 @@ import matplotlib.pyplot as plt
 import sage.all__sagemath_graphs  
 from sage.graphs.graph import Graph as SageGraph
 from sage.groups.perm_gps.permgroup import PermutationGroup_generic
+from copy import copy
 
 
 # ============================================================ coloured graphs
@@ -145,6 +146,7 @@ def automorphisms(G):
     return S.automorphism_group(edge_labels=True)
 
 
+
 def stabilizer(A, *pis, tol=1e-12):
     """Largest subgroup of A fixing every distribution in pis.
 
@@ -157,8 +159,8 @@ def stabilizer(A, *pis, tol=1e-12):
         assert pi.shape == (A.degree(),), "distribution has wrong length"
         for c in np.unique(np.round(pi / tol)) * tol:            # distinct values of pi
             level_set = [int(u) for u in np.flatnonzero(np.abs(pi - c) <= tol)]
-            H = H.stabilizer(level_set, "OnSets")
-    return A.subgroup(H.gens())
+            H = A.subgroup(H.stabilizer(level_set, "OnSets").gens())
+    return H
 
 
 def orbits(H):

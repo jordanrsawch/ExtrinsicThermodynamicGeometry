@@ -25,7 +25,7 @@ Group theory (automorphism groups, stabilizers, orbits, character tables) carrie
 Binary wheels are available for Linux and macOS; Windows requires WSL.
 
 
-## Example: nested field-control submanifolds
+## Example usage
 
 
 ```python
@@ -35,6 +35,10 @@ from geometry import *
 import numpy as np
 import matplotlib.pyplot as plt
 ```
+
+    /Users/jordansawchuk/Library/CloudStorage/OneDrive-SimonFraserUniversity(1sfu)/Extrinsic Geometry/Code/geometry.py:178: SyntaxWarning: invalid escape sequence '\G'
+      """Transport a frame (n, k) along a path: D_t X = 0, i.e. Xdot = -Gamma(x)[:, m, :] xdot^m X, integrated by RK4
+
 
 Define the 2x2 spin system, plot G, and retrieve Aut(G).
 
@@ -181,8 +185,120 @@ plt.tight_layout()
     
 
 
+`second_fundamental_form(sub, amb, embed, u)` computes $\mathrm{I\!I}$ of a submanifold in an ambient manifold at coordinates $u$, given the embedding map. A submanifold is totally geodesic in the ambient space if and only if $\mathrm{I\!I} \equiv 0$ everywhere. The cell below supports the claim that $M_h$ is totally geodesic in $M_{h_i}$, but not in $\Delta^{15}$.  
+
+
+```python
+geo  = SimplexGeometry(M)                # the simplex with g = L^+
+g_hi = ControlGeometry(M, Mhi)           # M_hi with the inherited metric, field coordinates
+g_h  = ControlGeometry(M, Mh)            # M_h, coordinate h
+
+embed_in_hi = lambda h: jnp.ones(4) * jnp.atleast_1d(h)      # M_h -> M_hi: h -> (h, h, h, h)
+for h in (-1.0, -0.3, 0.5):
+    II_hi = second_fundamental_form(g_h, g_hi, embed_in_hi, jnp.array([h]))
+    II_D  = second_fundamental_form(g_h, geo,  Mh.pi,       jnp.array([h]))
+    print(f"h = {h:+.1f}:  |II| of M_h in M_hi = {float(jnp.abs(II_hi).max()):.1e}    in the simplex = {float(jnp.abs(II_D).max()):.3f}")
+```
+
+    h = -1.0:  |II| of M_h in M_hi = 1.2e-14    in the simplex = 0.036
+    h = -0.3:  |II| of M_h in M_hi = 4.7e-13    in the simplex = 24.485
+    h = +0.5:  |II| of M_h in M_hi = 9.8e-14    in the simplex = 4.429
+
+
+`K_blocks(geo, x, v, S)` restricts the the tidal form $R(\cdot, v, \cdot, v)/\|v\|^2$ of the ambient geometry to a $g$-orthonormal frame of each accessible symmetry-breaking sector, and the resulting blocks are the sector curvatures $\mathbb{K}_\rho$. Along $M_h$ the tidal form is block-diagonal in the sectors, and within $\rho = 4$ the two eigenvalues coincide ($d_\rho = 2$). Positive curvatures focus geodesics and indicate symmetries that might be worth breaking. For $M_h$, both symmetries are worth breaking. 
+
+
+```python
+hs = np.linspace(-1, 1, 41)
+v = np.ones(4)                                                 # tangent of M_h in field coordinates
+curv = {r: [] for r in Sc.accessible}
+for h in hs:
+    for r, (K, w) in K_blocks(g_hi, jnp.asarray(h * np.ones(4)), jnp.asarray(v), Sc).items():
+        curv[r].append(np.asarray(w))
+
+fig, ax = plt.subplots(figsize=(6, 3.6))
+for r, W in curv.items():
+    W = np.array(W)
+    for i in range(W.shape[1]):
+        ax.plot(hs, W[:, i], color=f"C{r}", ls="-" if i == 0 else "--", label=rf"$\rho={r}$" if i == 0 else None)
+ax.axhline(0, color="k", lw=0.5)
+ax.set_xlabel("$h$"); ax.set_ylabel(r"eigenvalues of $\mathbb{K}_\rho$")
+ax.legend()
+plt.tight_layout()
+```
+
+
+    
+![png](README_files/README_16_0.png)
+    
+
+
+Given an optimal protocol in a submanifold, `K_along_path` returns the sector curvatures $\mathbb{K}_\rho(t)$ and `sector_jacobi` integrates the independent Jacobi equations and identifies their conjugate points.
+
+Below, the optimal protocols are taken from the published control-set survey [*4 spin system protocols and spectra* (Zenodo)](https://doi.org/10.5281/zenodo.15678284). Each row of `allProtocols.pkl` holds the state energies $V(t)$ along one protocol and its excess work $\mathcal{W}^\star$. Converting $V(t)$ to field coordinates $h_i(t)$ puts every protocol in the ambient $M_{h_i}$.
+
+
+```python
+import pickle
+g_hi = ControlGeometry(M, Mhi)
+
+df = pickle.load(open("../fourSpinData/allProtocols.pkl", "rb"));
+CSETS = {r"$M_h$": [[0, 1, 2, 3]], r"$M_\parallel$": [[0, 1], [2, 3]], r"$M_\times$": [[0, 3], [1, 2]]}
+
+prots = {}
+for name, cset in CSETS.items():
+    r = next(r for _, r in df.iterrows() if r["cSet"] == cset)
+    V = np.asarray(r["V(t)"], float)                              # (N, 16) state energies along the protocol
+    w = np.exp(-V - (-V).max(1, keepdims=True)); pis = w / w.sum(1, keepdims=True)
+    path = np.array([Mhi.coordinates(p) for p in pis])            # field coordinates h_i(t)
+    prots[name] = dict(t=np.linspace(0, 1, len(V)), path=path, W=float(r["Work"]))
+```
+
+
+```python
+fig, axes = plt.subplots(len(prots), 3, figsize=(11, 2.6 * len(prots)), sharex=True)
+for i, (name, P) in enumerate(prots.items()):
+    t, path, W = P["t"], P["path"], P["W"]
+    K_grp = stabilizer(HB, *[Mhi.pi(u) for u in path[::5]])       # symmetry group of this protocol
+    Sk = Mhi.sectors(K_grp)
+    print(f"{name:14s} symmetry {K_grp.structure_description():8s} breaking sectors: "
+          + ", ".join(f"rho={r} dim {Sk.dim[r]} (d={Sk.d[r]}, m={Sk.m[r]})" for r in Sk.accessible))
+
+    ax = axes[i, 0]
+    for j in range(4): ax.plot(t, path[:, j], label=f"$h_{j}$")
+    ax.set_ylabel(name + "\n" + rf"$\mathcal{{W}}^\star = {W:.1f}$"); ax.legend(fontsize=7, ncol=2)
+
+    for r, K in K_along_path(g_hi, path, t, Sk).items():
+        lam = reduced_curvature(K, W)
+        axes[i, 1].fill_between(t, lam.min(1), lam.max(1), color=f"C{r}", alpha=0.3, label=rf"$\rho={r}$")
+        axes[i, 1].plot(t, lam.max(1), color=f"C{r}", lw=1)
+        out = sector_jacobi(g_hi, Sk, path, t, W, r, n_steps=5000)
+        det = out["det_sign"] * np.exp(out["det_logabs"] - np.nanmax(out["det_logabs"][1:]))
+        axes[i, 2].plot(out["ts"], det, color=f"C{r}",
+                        label=rf"$\rho={r}$" + (f" ×{out['multiplicity'][0]}" if out["multiplicity"] else ""))
+        for c in out["conjugate"]: axes[i, 2].plot(c, 0, "o", mfc="none", color=f"C{r}")
+    axes[i, 1].axhline(1, color="k", lw=0.5, ls="--"); axes[i, 1].legend(fontsize=7)
+    axes[i, 2].axhline(0, color="k", lw=0.5); axes[i, 2].legend(fontsize=7)
+
+axes[0, 0].set_title("protocol $h_i(t)$")
+axes[0, 1].set_title(r"$\mathcal{W}^\star\lambda(\mathbb{K}_\rho)/\pi^2$ in $M_{h_i}$")
+axes[0, 2].set_title(r"$\det X_\rho(t)$ (normalised)")
+for ax in axes[-1]: ax.set_xlabel("$t$")
+plt.tight_layout()
+```
+
+    $M_h$          symmetry D4       breaking sectors: rho=1 dim 1 (d=1, m=1), rho=4 dim 2 (d=2, m=1)
+    $M_\parallel$  symmetry C2       breaking sectors: rho=1 dim 2 (d=1, m=2)
+    $M_\times$     symmetry C2 x C2  breaking sectors: rho=1 dim 1 (d=1, m=1), rho=2 dim 1 (d=1, m=1)
+
+
+
+    
+![png](README_files/README_19_1.png)
+    
+
+
 ## References
 - The Sage Developers, *SageMath, the Sage Mathematics Software System (Version 10.x)*, https://www.sagemath.org, DOI 10.5281/zenodo.8042260.
 - The GAP Group, *GAP – Groups, Algorithms, and Programming, Version 4.14.0*, 2024, https://www.gap-system.org.
-
-
+- J. Sawchuk, *4 spin system protocols and spectra*, Zenodo (2025), doi:10.5281/zenodo.15678284.
