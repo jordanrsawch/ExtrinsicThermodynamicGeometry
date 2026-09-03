@@ -8,6 +8,8 @@ Code supporting *Extrinsic thermodynamic geometry and the cost of constraint*.
 
 `models.py`   : 
 
+`geometry.py` :
+
 ## Dependencies
 
 Python ≥ 3.11
