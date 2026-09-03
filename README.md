@@ -4,7 +4,7 @@ Code supporting *Extrinsic thermodynamic geometry and the cost of constraint*.
 
 ## Files
 
-`symmetry.py` : edge-coloured Markov graphs, their automorphism groups, the isotypic decomposition of $\mathbb{R}^n$ under a subgroup, and the induced representation of a group on a control set
+`symmetry.py` : edge-coloured Markov graphs, their automorphism groups, the isotypic decomposition of $\mathbf{R}^n$ under a subgroup, and the induced representation of a group on a control set
 
 `models.py`   : Markov models built on graph structure - colours assigned by rate laws, rate matrix $\mathbb{W}$, Laplacian $L$, friction metric $g = L^+$, control sets as submanifolds of the simplex with inherited symmetry, and spin-system builders.
 
