@@ -293,6 +293,8 @@ plt.tight_layout()
 ![png](README_files/README_19_1.png)
     
 
+Note: sector indices $\rho$ are per-group labels (rows of the character table of each protocol's symmetry group) and do not correspond across rows. To track between control sets, compare characters rather than labels, or determine which $D_4$ irrep each subgroup irrep descends from.
+
 
 ## References
 - The Sage Developers, *SageMath, the Sage Mathematics Software System (Version 10.x)*, https://www.sagemath.org, DOI 10.5281/zenodo.8042260.
