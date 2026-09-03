@@ -4,11 +4,11 @@ Code supporting *Extrinsic thermodynamic geometry and the cost of constraint*.
 
 ## Files
 
-`symmetry.py` : edge-coloured Markov graphs, their automorphism groups, the isotypic decomposition of $\mathbf{R}^n$ under a subgroup, and the induced representation of a group on a control set
+`symmetry.py` : edge-coloured Markov graphs, their automorphism groups, the isotypic decomposition of $`\mathbb{R}^n`$ under a subgroup, and the induced representation of a group on a control set
 
-`models.py`   : Markov models built on graph structure - colours assigned by rate laws, rate matrix $\mathbb{W}$, Laplacian $L$, friction metric $g = L^+$, control sets as submanifolds of the simplex with inherited symmetry, and spin-system builders.
+`models.py`   : Markov models built on graph structure — colours assigned by rate laws, rate matrix $`\mathbb{W}`$, Laplacian $`L`$, friction metric $`g = L^+`$, control sets as submanifolds of the simplex with inherited symmetry, and spin-system builders.
 
-`geometry.py` : the friction geometry of the simplex ($g = L^+$) and of control sets with the inherited metric $J^\mathsf{T} L^+ J$, incl. Christoffel symbols, Riemann and tidal curvature by automatic differentiation; $g$-orthonormal sector frames and the sector curvature blocks $\mathbb{K}_\rho$; parallel transport along a protocol; the second fundamental form of a submanifold; and integration of the sector Jacobi equation $\ddot{x}_\rho + \mathscr{W}^\star \mathbb{K}_\rho(t)\, x_\rho = 0$ to locate conjugate points.
+`geometry.py` : the friction geometry of the simplex ($`g = L^+`$) and of control sets with the inherited metric $`J^\mathsf{T} L^+ J`$, incl. Christoffel symbols, Riemann and tidal curvature by automatic differentiation; $`g`$-orthonormal sector frames and the sector curvature blocks $`\mathbb{K}_\rho`$; parallel transport along a protocol; the second fundamental form of a submanifold; and integration of the sector Jacobi equation $`\ddot{x}_\rho + \mathscr{W}^\star \mathbb{K}_\rho(t)\, x_\rho = 0`$ to locate conjugate points.
 
 ## Dependencies
 
