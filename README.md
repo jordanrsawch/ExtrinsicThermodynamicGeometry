@@ -25,7 +25,7 @@ Group theory (automorphism groups, stabilizers, orbits, character tables) carrie
 Binary wheels are available for Linux and macOS; Windows requires WSL.
 
 
-## Example usage
+## Example: nested field-control submanifolds
 
 
 ```python
