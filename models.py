@@ -160,17 +160,17 @@ class Model:
 class ControlSet:
     """A control set M' = { pi(u) : u in R^m } in the exponential-family chart
 
-            pi(u) = softmax(theta0 + B u),
+            pi(u) = softmax(V0 + B u),
 
     i.e. control coordinates coupled linearly to the state energies in a system in contact with
-    a single heat bath. Column j of B is the force conjugate to u^j; theta0 is a fixed
+    a single heat bath. Column j of B is the force conjugate to u^j; V0 is a fixed
     background. The tangent space at pi(u) is (diag pi - pi pi^T) col(B).
 
     Symmetry: sectors(H) restricts the permutation representation of H to col(B) and decomposes 
     the control space; fixed(H) is the sub-control-set M' cap M_H.
     """
     B: np.ndarray
-    theta0: np.ndarray = None
+    V0: np.ndarray = None
     name: str = ""
 
     # derived
@@ -186,13 +186,13 @@ class ControlSet:
         rank = int((s > 1e-10 * max(1.0, s[0])).sum())
         assert rank == m, f"control basis has rank {rank} < {m} after gauge fixing (redundant coordinates)"
         set_(self, "B", B)
-        set_(self, "theta0", np.zeros(n) if self.theta0 is None else np.asarray(self.theta0, float))
+        set_(self, "V0", np.zeros(n) if self.V0 is None else np.asarray(self.V0, float))
         set_(self, "n", n); set_(self, "dim", m)
 
     # ---- chart -------------------------------------------------------------
     def pi(self, u):
-        """pi(u) = softmax(theta0 + B u)"""
-        th = self.theta0 + self.B @ u
+        """pi(u) = softmax(V0 + B u)"""
+        th = self.V0 + self.B @ u
         w = jnp.exp(th - th.max())
         return w / w.sum()
 
@@ -204,7 +204,7 @@ class ControlSet:
     def coordinates(self, pi, atol=1e-10):
         """u with pi(u) = pi, by least squares on log pi. Raises if pi is not in M'."""
         A = np.hstack([self.B, np.ones((self.n, 1))])
-        u = np.linalg.lstsq(A, np.log(pi) - self.theta0, rcond=None)[0][:self.dim]
+        u = np.linalg.lstsq(A, np.log(pi) - self.V0, rcond=None)[0][:self.dim]
         err = float(np.max(np.abs(np.asarray(self.pi(u)) - pi)))
         if err > atol:
             raise ValueError(f"pi not in control set '{self.name}' (residual {err:.2e})")
@@ -214,19 +214,19 @@ class ControlSet:
     def symmetry_group(self, H, tol=1e-9):
         """Aut(G, M'): the elements of H mapping M' to itself, with their action S on control coordinates.
 
-        Asserts H-invariant theta0 by checking that (P_s - I) theta0 is in col(B) + span{1} for all s in H_B.
+        Asserts H-invariant V0 by checking that (P_s - I) V0 is in col(B) + span{1} for all s in H_B.
         """
         S, H_B = induced_representation(H, self.B, tol)
-        if np.any(self.theta0):
+        if np.any(self.V0):
             A1 = np.hstack([self.B, np.ones((self.n, 1))]) # Columns span col(B) + span{1}
             kept = []
             for g in H_B:
                 P = perm_matrix(as_tuple(g, self.n))
-                dth = P @ self.theta0 - self.theta0
-                coef = np.linalg.lstsq(A1, dth, rcond=None)[0]
-                if np.abs(A1 @ coef - dth).max() <= tol:
+                shift = P @ self.V0 - self.V0
+                coef = np.linalg.lstsq(A1, shift, rcond=None)[0]
+                if np.abs(A1 @ coef - shift).max() <= tol:
                     assert np.abs(coef[:self.dim]).max() <= tol, \
-                        "theta0 is not H-invariant: the induced action is affine"
+                        "V0 is not H-invariant: the induced action is affine"
                     kept.append(g)
             if len(kept) < H_B.order():
                 H_B = H.subgroup(kept)
@@ -240,12 +240,12 @@ class ControlSet:
 
     def fixed(self, H, tol=1e-9):
         """The sub-control-set M = M' cap M_H, and the lift A of its coordinates
-        to control coordinates: u = A y, pi = softmax(theta0 + B A y).
+        to control coordinates: u = A y, pi = softmax(V0 + B A y).
         A is an orthonormal basis of the invariant sector U'_0."""
         Sc = self.sectors(H, tol)
         A = Sc.U[Sc.rho0]
         assert A.shape[1] > 0, "M' cap M_H is a point"
-        return ControlSet(self.B @ A, self.theta0, name=f"{self.name} ∩ M_H"), A
+        return ControlSet(self.B @ A, self.V0, name=f"{self.name} ∩ M_H"), A
 
 
 def simplex(n):
@@ -261,6 +261,47 @@ def fixed_manifold(H):
     for a, o in enumerate(orbs):
         B[o, a] = 1.0
     return ControlSet(B[:, :-1] if len(orbs) > 1 else B, name=f"M_H (r={len(orbs)})")
+
+
+def is_totally_geodesic(M, Mprime, A, tol=1e-9):
+    """Chick if the control set M is totally geodesic in Mprime.
+
+    Sufficient condition: M is the fixed-point set, within Mprime of a subgroup K of Aut(G, Mprime), 
+    whose elements are isometries of the inherited metric. K is taken as large as possible: every
+    element of A preserving Mprime that fixes M pointwise. Returns (verdict, K).
+
+    A is Aut(G, M') (or any group containing the relevant symmetries). Requires M subset Mprime (same V0, col(M.B) 
+    in col(Mprime.B)); asserts otherwise. A False verdict means "not certified by symmetry", not necessarily "not 
+    totally geodesic".
+    """
+    n = M.n
+    assert n == Mprime.n and np.allclose(M.V0, Mprime.V0), "M and Mprime differ in V0"
+    coef = np.linalg.lstsq(Mprime.B, M.B, rcond=None)[0]
+    assert np.abs(Mprime.B @ coef - M.B).max() < tol, "M is not a subset of Mprime"
+
+    S, H_amb = induced_representation(A, Mprime.B, tol)           # sigma with P_sigma col(B_amb) = col(B_amb)
+    # sigma fixes M pointwise iff P_sigma (V0 + M.B y) = V0 + M.B y mod constants for all y:
+    # (P_sigma - I) V0 in span(1) and P_sigma M.B = M.B.
+    fixing = []
+    for g in H_amb:
+        P = perm_matrix(as_tuple(g, n))
+        shift = P @ M.V0 - M.V0
+        if np.abs(shift - shift.mean()).max() < tol and np.abs(P @ M.B - M.B).max() < tol:
+            fixing.append(g)
+
+    K = H_amb.subgroup(fixing)
+    if K.order() == 1:
+        return False, K
+    
+    # Above determined that M \subseteq Fix(K). Remains to check that Fix(K) \subseteq M.
+    # Proceeds by determining an orthonormal basis F if the invariant sector under K and then
+    # checking whether F and M.B have the same column space.
+    SK = {s: Ss for s, Ss in S.items() if s in {as_tuple(g, n) for g in K}}  # Induced representation of Aut(G,M') in coods of M'
+    Sec = Sectors(K, rep=SK)
+    F = Mprime.B @ Sec.U[Sec.rho0] 
+    same = (F.shape[1] == M.dim and np.abs(F @ np.linalg.lstsq(F, M.B, rcond=None)[0] - M.B).max() < tol) 
+    
+    return bool(same), K
 
 
 # ============================================================ spin systems
