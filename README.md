@@ -8,7 +8,7 @@ Code supporting *Extrinsic thermodynamic geometry and the cost of constraint*.
 
 `models.py`   : Markov models built on graph structure - colours assigned by rate laws, rate matrix $\mathbb{W}$, Laplacian $L$, friction metric $g = L^+$, control sets as submanifolds of the simplex with inherited symmetry, and spin-system builders.
 
-`geometry.py` :
+`geometry.py` : the friction geometry of the simplex ($g = L^+$) and of control sets with the inherited metric $J^\mathsf{T} L^+ J$, incl. Christoffel symbols, Riemann and tidal curvature by automatic differentiation; $g$-orthonormal sector frames and the sector curvature blocks $\mathbb{K}_\rho$; parallel transport along a protocol; the second fundamental form of a submanifold; and integration of the sector Jacobi equation $\ddot{x}_\rho + \mathscr{W}^\star \mathbb{K}_\rho(t)\, x_\rho = 0$ to locate conjugate points.
 
 ## Dependencies
 
@@ -35,10 +35,6 @@ from geometry import *
 import numpy as np
 import matplotlib.pyplot as plt
 ```
-
-    /Users/jordansawchuk/Library/CloudStorage/OneDrive-SimonFraserUniversity(1sfu)/Extrinsic Geometry/Code/geometry.py:178: SyntaxWarning: invalid escape sequence '\G'
-      """Transport a frame (n, k) along a path: D_t X = 0, i.e. Xdot = -Gamma(x)[:, m, :] xdot^m X, integrated by RK4
-
 
 Define the 2x2 spin system, plot G, and retrieve Aut(G).
 
