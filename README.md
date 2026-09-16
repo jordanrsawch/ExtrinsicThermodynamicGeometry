@@ -51,7 +51,7 @@ import matplotlib.pyplot as plt
 
 `spin_system(n, law)` builds the $2^n$-state single-spin-flip model: states are bit strings, edges connect states differing by one flip, and each edge carries the dynamical law of the spin it flips. With one Glauber law for every spin, $c_{\mu\nu} = \pi_\mu\pi_\nu/(\pi_\mu + \pi_\nu)$ on every edge and the coloring is trivial. (Passing a list of  $n$ laws, one per spin, colors the edges by spin and shrinks the automorphism group accordingly.)
 
-`M.G` is the edge-colored graph, here the tesseract (trivially colored), and `M.G.aut` its color-preserving automorphism group, computed by Sage/GAP and returned as a permutation group on the state indices $0,\dots,15$. Here, $\operatorname{Aut}(G)$ is the hyperoctahedral group of order $4!\,2^4 = 384$, consisting of permutations of the four spins combined with reversals of any subset of them.
+`M.G` is the edge-colored graph, here the tesseract (trivially colored), and `M.G.aut` its color-preserving automorphism group, computed by Sage/GAP and returned as a permutation group on the state indices $0,\dots,15$. Here, $\mathrm{Aut}(G)$ is the hyperoctahedral group of order $4!\,2^4 = 384$, consisting of permutations of the four spins combined with reversals of any subset of them.
 
 
 ```python
@@ -460,10 +460,10 @@ fig.get_layout_engine().set(w_pad=2 / 72, h_pad=2 / 72, wspace=0.04, hspace=0.06
 for i, (name, R) in enumerate(results.items()):
     t, path, W = R["t"], R["path"], R["W"]
 
-    # column 0: control set
+    # column 0: control set & excess work
     spin_block(axes[i, 0], CSETS[name], GROUP_COLORS[name], name, W)
 
-    # column 1: optimal protocol, one curve per control group
+    # column 1: optimal protocols
     ax = axes[i, 1]
     for gi, grp in enumerate(CSETS[name]):
         ax.plot(t, path[:, grp[0]], color=GROUP_COLORS[name][gi], lw=1.2)
@@ -487,13 +487,12 @@ for i, (name, R) in enumerate(results.items()):
     ax.set_title(f"{name}: {R['verdict']}", loc="right", pad=2, color="0.25")
     style_axis(ax)
 
-    # column 3: det X_rho(t) and conjugate points; legend outside, one per row
+    # column 3: det X_rho(t) and conjugate points
     ax = axes[i, 3]
     for k, (r, s) in enumerate(R["sectors"].items()):
         col = SECTOR_COLORS[k]
         det = s["det_sign"] * np.exp(s["det_logabs"] - np.nanmax(s["det_logabs"][1:]))
-        mult = f" $\\times{s['multiplicity'][0]}$" if s["multiplicity"] else ""
-        ax.plot(s["ts"], det, color=col, lw=1.0, label=rf"dim {s['dim']} ($d_\rho={s['d']}$, $m_\rho={s['m']}$)" + mult)
+        ax.plot(s["ts"], det, color=col, lw=1.0, label=rf"$d_\rho={s['d']}$, $m_\rho={s['m']}$")
         for c in s["conjugate"]: ax.plot(c, 0, "o", mfc="none", color=col, ms=4, mew=0.8)
     ax.axhline(0, color="0.7", lw=0.5); ax.set_ylim(-1.15, 1.15); ax.set_yticks([-1, 0, 1])
     ax.legend(frameon=False, loc="center left", bbox_to_anchor=(1.0, 0.5), handlelength=1.3, borderaxespad=0.2)
@@ -504,7 +503,6 @@ axes[1, 1].set_ylabel(r"$h_i(t)$")
 axes[1, 2].set_ylabel(r"$\mathscr{W}^\star\,\lambda_{\rm ext}(\mathbb{K}_\rho)/\pi^2$")
 axes[1, 3].set_ylabel(r"$\det X_\rho(t)$ (normalised)")
 for ax in axes[-1, 1:]: ax.set_xlabel("$t$")
-# fig.savefig("../Paper/Figures/fourSpinPanel_nb.pdf")
 ```
 
 
