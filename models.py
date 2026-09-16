@@ -308,7 +308,7 @@ def is_totally_geodesic(M, Mprime, A, tol=1e-9):
     """
     n = M.n
     assert n == Mprime.n
-    
+
     # M in Mprime: theta0 - theta0' in col(B') + span(1), and col(B) in col(B').
     A1 = np.hstack([Mprime.B, np.ones((n, 1))])
     base = np.linalg.lstsq(A1, M.theta0 - Mprime.theta0, rcond=None)[0]
@@ -346,7 +346,7 @@ def spins(n_spins):
 
 def spin_labels(n_spins):
     """State labels like '$0$$1$' read left to right as spin 0, 1, ..."""
-    return tuple(''.join(r'$1$' if (s >> j) & 1 else r'$0$' for j in range(n_spins))
+    return tuple(''.join(r'1' if (s >> j) & 1 else r'0' for j in range(n_spins))
                  for s in range(2 ** n_spins))
 
 def spin_system(n_spins, laws, xp=np):
@@ -388,7 +388,7 @@ def coupling_basis(n_spins, pairs):
     B, _ = spin_monomials(n_spins, [tuple(p) for p in pairs])
     return B, [f"J{i}{j}" for i, j in pairs]
 
-def spin_full_control(n_spins):
+def spin_full_control(n_spins, name=None):
     """Full control of a spin system in Ising coordinates.
 
     Columns are all 2**n_spins - 1 nonempty spin monomials, ordered by increasing order (fields, then pair couplings, 
@@ -398,5 +398,5 @@ def spin_full_control(n_spins):
     """
     subsets = [c for r in range(1, n_spins + 1) for c in combinations(range(n_spins), r)]
     B, names = spin_monomials(n_spins, subsets)
-    return ControlSet(B, name=f"full control ({n_spins} spins)"), names
+    return ControlSet(B, name=name or f"full control ({n_spins} spins)"), names
 
