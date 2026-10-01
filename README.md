@@ -251,9 +251,6 @@ for name, R in results.items():
 
 
 ```python
-FIG_PATH = None                                   # e.g. "fourSpinPanel.pdf" to save the figure
-
-# ---- style (paper palette; cm-style math without usetex) ----
 plt.rcParams.update({"font.family": "serif", "mathtext.fontset": "cm", "axes.unicode_minus": False,
                      "font.size": 7, "axes.labelsize": 7.5, "axes.titlesize": 7.5, "legend.fontsize": 6.5,
                      "xtick.labelsize": 6.5, "ytick.labelsize": 6.5, "axes.linewidth": 0.7, "pdf.fonttype": 42})
@@ -326,9 +323,6 @@ for i, (name, R) in enumerate(results.items()):
 
 axes[0, 2].annotate(r"threshold $=1$", xy=(0.5, 2.4), fontsize=6, color="0.25", ha="center")
 for ax in axes[-1, 1:]: ax.set_xlabel("$t$")
-
-if FIG_PATH:
-    fig.savefig(FIG_PATH)
 ```
 
 
