@@ -1,13 +1,13 @@
 # ExtrinsicThermodynamicGeometry
 
-Code supporting *Extrinsic thermodynamic geometry, symmetry, and the cost of constraint* (J.R. Sawchuk & D.A. Sivak). Notation follows the paper: states $\mu \in \Omega$, equilibrium distribution $\pi$ on the open simplex $\Delta^n$, Laplacian $L = \mathbb{W}D_{\pi}$, friction metric $L^+$, excess work functional $\mathscr{W}$, accessible symmetry sectors $\mathcal{U}_\rho$ with irrep dimension $d_{\rho}$ and multiplicity $m_{\rho}$, and sector curvature operators $\mathbb{K}_\rho$.
+Code supporting *Extrinsic thermodynamic geometry, symmetry, and the cost of constraint* (J.R. Sawchuk & D.A. Sivak). Notation follows the paper: states $\mu \in \Omega$, equilibrium distribution $\pi$ on the open simplex $\Delta^n$, Laplacian $L = \mathbb{W}D_{\pi}$, friction metric $L^+$, excess work functional $\mathscr{W}$, accessible symmetry sectors $\mathcal{U}\_\rho$ with irrep dimension $d\_{\rho}$ and multiplicity $m\_{\rho}$, and sector curvature operators $\mathbb{K}\_\rho$.
 
 ## Files
 
 `symmetry.py` - symmetries of the Markov graph and their representations.
 - `ColouredGraph` : the edge-coloured Markov graph and its automorphism group $\mathrm{Aut}(G)$ (`.aut`), computed with SageMath and returned as a permutation group on the state indices.
 - `stabilizer` : the subgroup fixing given distributions, e.g. the endpoints of a protocol, or every point along it, from which `orbits` returns the orbits of the group.
-- `Sectors` : the decomposition of a representation into the sectors $\mathcal{U}_{\rho}$ of a group, built from its character table with GAP. For each sector, returns the projector, an orthonormal basis, and the irrep dimension and multiplicity.
+- `Sectors` : the decomposition of a representation into the sectors $\mathcal{U}\_{\rho}$ of a group, built from its character table with GAP. For each sector, returns the projector, an orthonormal basis, and the irrep dimension and multiplicity.
 - `induced_representation` : computes $S_{\sigma} = B^+ P_{\sigma} B$, the action of a group on the coordinates of a control set 
 
 `models.py` - Markov models and control sets.
@@ -21,8 +21,8 @@ Code supporting *Extrinsic thermodynamic geometry, symmetry, and the cost of con
 
 `geometry.py` — Riemannian geometry of the thermodynamic manifold and the comparison theorem
 - `SimplexGeometry`, `ControlGeometry` : simplex w/ the friction metric $L^+$ and a control set with the inherited metric $\mathbb{J}^{\sf T}L^+ \mathbb{J}$. Christoffel symbols and the Riemann tensor are obtained by forward-mode automatic differentiation in JAX, with the conventions of Appendix A from the paper.
-- `K_blocks`, `K_along_path` : sector curvature operators at a point or along a discretized protocol. `parallel_frames` transports the frames, and `reduced_curvature` returns the eigenvalues of $\mathbb{K}_{\rho}$ scaled by $\mathscr{W}^\star / \pi^2$ for the comparison theorem tests.
-- `sector_jacobi` : integrates $\ddot{X}_{\rho} + \mathscr{W}^\star \mathbb{K}_{\rho}(t) X_{\rho} = 0$ with initial conditions $X_{\rho}(0) = 0$, $\dot{X}_{\rho}(0) = I$ by fourth-order Runge-Kutta, with periodic QR re-normalization to keep $X\_{\rho}$ well-conditioned. Locates conjugate points as sign changes of $\mathrm{det}(X_{\rho})$. Sectors with both $d_{\rho} > 1$ and $m_{\rho} > 1$ are out of scope. This case is not necessary for the paper, but the code should be generalized to address this in future iterations.
+- `K_blocks`, `K_along_path` : sector curvature operators at a point or along a discretized protocol. `parallel_frames` transports the frames, and `reduced_curvature` returns the eigenvalues of $\mathbb{K}\_{\rho}$ scaled by $\mathscr{W}^\star / \pi^2$ for the comparison theorem tests.
+- `sector_jacobi` : integrates $\ddot{X}\_{\rho} + \mathscr{W}^\star \mathbb{K}\_{\rho}(t) X_{\rho} = 0$ with initial conditions $X_{\rho}(0) = 0$, $\dot{X}\_{\rho}(0) = I$ by fourth-order Runge-Kutta, with periodic QR re-normalization to keep $X\_{\rho}$ well-conditioned. Locates conjugate points as sign changes of $\mathrm{det}(X_{\rho})$. Sectors with both $d_{\rho} > 1$ and $m_{\rho} > 1$ are out of scope. This case is not necessary for the paper, but the code should be generalized to address this in future iterations.
 
 ## Dependencies
 
@@ -186,7 +186,7 @@ for name, sec in sectors.items():
 
 Optimal protocols are from the control-set survey [*4 spin system protocols and spectra* (Zenodo)](https://doi.org/10.5281/zenodo.15678284). Each row of `allProtocols.pkl` gives the state energies $V(t)$ on 251 uniformly spaced times, and the corresponding protocol's excess work $\mathscr{W}^\star$. These are translated to field coordinates $h_i(t)$ below, in which `ControlGeometry(model, Mhi)` provides the inherited metric and its curvature.
 
-For each protocol, `stabilizer` is checked against the groups found above.  `parallel_frames` transports a $g$-orthonormal frame of each accessible sector along the protocol, `K_along_path` evaluates $\mathbb{K}_\rho(t)$ in those frames, and `reduced_curvature`  gives its eigenvalues scaled by $\mathscr{W}^\star/\pi^2$ for the thermodynamic comparison theorem. `sector_jacobi` integrates $\ddot{X}_\rho + \mathscr{W}^\star\mathbb{K}_\rho(t)X_\rho = 0$, $X_\rho(0) = 0$, $\dot{X}_\rho(0) = I$, and reports the zeros of $\det X_\rho$ as conjugate points. 
+For each protocol, `stabilizer` is checked against the groups found above.  `parallel_frames` transports a $g$-orthonormal frame of each accessible sector along the protocol, `K_along_path` evaluates $\mathbb{K}\_\rho(t)$ in those frames, and `reduced_curvature`  gives its eigenvalues scaled by $\mathscr{W}^\star/\pi^2$ for the thermodynamic comparison theorem. `sector_jacobi` integrates $\ddot{X}\_\rho + \mathscr{W}^\star\mathbb{K}\_\rho(t)X_\rho = 0$, $X_\rho(0) = 0$, $\dot{X}\_\rho(0) = I$, and reports the zeros of $\det X_\rho$ as conjugate points. 
 
 
 ```python
@@ -308,7 +308,7 @@ for i, (name, R) in enumerate(results.items()):
     ax.axhline(0, color="0.7", lw=0.5)
     ax.set_yscale("symlog", linthresh=1, linscale=0.6); ax.set_ylim(-12, 600)
     ax.set_yticks([-10, 0, 1, 10, 100]); ax.set_yticklabels([r"$-10$", "0", "1", "10", "100"])
-    ax.set_ylabel(r"$\mathscr{W}^\star\,\lambda_{\rm ext}(\mathbb{K}_\rho)/\pi^2$")
+    ax.set_ylabel(r"$\mathscr{W}^\star\,\lambda_{\rm ext}(\mathbb{K}\_\rho)/\pi^2$")
     ax.set_title(R["verdict"], loc="right", pad=2, color="0.25"); ax.set_title(f"({next(labels)})", loc="left", pad=2)
     style_axis(ax)
 
