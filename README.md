@@ -341,7 +341,7 @@ if FIG_PATH:
 
 Two direct confirmations of the symmetry results above.
 
-**Second fundamental form.** `second_fundamental_form(sub, amb, embed, u)` evaluates $\mathrm{I\!I}$ of a submanifold in an ambient manifold at the submanifold coordinates $u$. $\mathrm{I\!I} \equiv 0$ if and only if the submanifold is totally geodesic. $M_h$ is totally geodesic in $M_{h_i}$ (residual at machine precision) but not in $\Delta^{15}$, where $\mathrm{I\!I}$ is large near the transition region of the ferromagnet. With the simplex as ambient space, the embedding is the chart `Mh.pi` itself.
+**Second fundamental form.** `second_fundamental_form(sub, amb, embed, u)` evaluates $\mathrm{I\!I}$ of a submanifold in an ambient manifold at the submanifold coordinates $u$. $\mathrm{II} \equiv 0$ if and only if the submanifold is totally geodesic. $M_h$ is totally geodesic in $M_{h_i}$ (residual at machine precision) but not in $\Delta^{15}$, where $\mathrm{I\!I}$ is large near the transition region of the ferromagnet. With the simplex as ambient space, the embedding is the chart `Mh.pi` itself.
 
 
 ```python
