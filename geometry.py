@@ -11,13 +11,14 @@ Index conventions (all derivatives by jax forward-mode):
     Gamma_{lmn} = 1/2 (d_m g_{nl} + d_n g_{lm} - d_l g_{mn})
     Gamma^r_{mn} = g^{rl} Gamma_{lmn}
     R^r_{smn}   = d_m Gamma^r_{ns} - d_n Gamma^r_{ms} + Gamma^r_{ml} Gamma^l_{ns} - Gamma^r_{nl} Gamma^l_{ms}
-    R_{wsmn}    = g_{wr} R^r_{smn},   R(e_a, e_b, e_c, e_d) = R_{abcd}
+    R_{wsmn}    = g_{wr} R^r_{smn} 
 
 """
 
 import numpy as np
 import jax, jax.numpy as jnp
 from jax import jacfwd
+from scipy.interpolate import CubicSpline
 jax.config.update("jax_enable_x64", True)
 
 
@@ -67,17 +68,11 @@ class Geometry:
         return self._project(jnp.einsum('rw,rsmn->wsmn', self._metric(x), R))
 
     def _tidal(self, x, v):
-        """A_{ad} = R(e_a, v, e_d, v) / ||v||^2_g: the normalized tidal form.
+        """A_{ad} = R(e_a, v, v, e_d) / ||v||^2_g: the normalized tidal form.
         Its diagonal entries in a g-orthonormal frame are sectional curvatures
         of the planes spanned with v; depends on v only through its direction."""
         Rd = self._riemann_low(x)
         return jnp.einsum('abcd,b,d->ac', Rd, v, v) / (v @ self._metric(x) @ v)
-
-    def sectional(self, x, u, v):
-        """K(span{u, v}) = R(u, v, u, v) / (|u|^2 |v|^2 - <u, v>^2)."""
-        Rd, g = self._riemann_low(x), self._metric(x)
-        num = jnp.einsum('abcd,a,b,c,d->', Rd, u, v, u, v)
-        return num / ((u @ g @ u) * (v @ g @ v) - (u @ g @ v) ** 2)
 
 
 class SimplexGeometry(Geometry):
@@ -101,12 +96,7 @@ class SimplexGeometry(Geometry):
 
 
 class ControlGeometry(Geometry):
-    """A control set M' with the inherited metric G(u) = J^T L^+ J, J = dpi/du.
-
-    The columns of J lie in 1^perp, so J^T L^+ J = J^T (L + Jn)^{-1} J exactly,
-    which avoids forming L^+. G is nondegenerate (B gauge-fixed), so no
-    projection is needed.
-    """
+    """A control set M' with the inherited metric G(u) = J^T L^+ J, J = dpi/du."""
 
     def __init__(self, model, control):
         self.model, self.control = model, control
@@ -158,49 +148,35 @@ def K_blocks(geo, x, v, S):
         out[r] = (K, jnp.linalg.eigvalsh(K))
     return out
 
-
 def path_velocity(path, t):
-    """d x/dt along a discretised path by second-order finite differences on a non-uniform grid (three-point interior 
-    formula, one-sided at the ends). Only the direction feeds the tidal form, which is homogeneous in v."""
-    p, t = np.asarray(path, float), np.asarray(t, float)
-    assert p.shape[0] == t.shape[0] and p.shape[0] >= 3
-    v = np.empty_like(p)
-    hm, hp = (t[1:-1] - t[:-2])[:, None], (t[2:] - t[1:-1])[:, None]
-    v[1:-1] = (hm**2 * p[2:] + (hp**2 - hm**2) * p[1:-1] - hp**2 * p[:-2]) / (hm * hp * (hm + hp))
-    h1, h2 = t[1] - t[0], t[2] - t[1]
-    v[0] = (-(2*h1 + h2)/(h1*(h1 + h2)) * p[0] + (h1 + h2)/(h1*h2) * p[1] - h1/(h2*(h1 + h2)) * p[2])
-    g1, g2 = t[-1] - t[-2], t[-2] - t[-3]
-    v[-1] = ((2*g1 + g2)/(g1*(g1 + g2)) * p[-1] - (g1 + g2)/(g1*g2) * p[-2] + g1/(g2*(g1 + g2)) * p[-3])
-    return v
-
+    """d x/dt at the grid points of a discretised path, from a cubic spline through the points."""
+    return CubicSpline(np.asarray(t, float), np.asarray(path, float), axis=0).derivative()(np.asarray(t, float))
 
 def parallel_transport(geo, path, t, frame0):
-    """Transport a frame (n, k) along a path: D_t X = 0, i.e. Xdot = -Gamma(x)[:, m, :] xdot^m X, integrated by RK4 
-    with the path linearly interpolated. Preserves g-inner products and each sector U_rho when the path lies in M_H.
+    """Transport a frame (n, k) along a path: D_t X = 0, i.e. dot{X} = A(t) X with A^r_n(t) = -Gamma^r_mn(x(t)) dot{x}^m(t).
 
-    D_t X = 0 written as a matrix ODE by defining A^r_n(t) = -\Gamma^r_mn(x(t))\dot{x}^m(t), giving \dot{X} - A(t)X = 0.
+    The path and its velocity are interpolated by a cubic spline through the grid points, and the ODE is integrated by
+    RK4 from grid point to grid point. Re-orthonormalisation of the frame at each grid point removes the integration
+    error in the frame's normalization.  
     """
-    p, t = np.asarray(path), np.asarray(t)
-    v = path_velocity(p, t)
+    t = np.asarray(t, float)
+    spl = CubicSpline(t, np.asarray(path, float), axis=0); dspl = spl.derivative()
 
-    def A_at(x, vel):
-        return -jnp.einsum('rmn,m->rn', geo.christoffel(x), vel)
+    def A_at(s):
+        return -jnp.einsum('rmn,m->rn', geo.christoffel(jnp.asarray(spl(s))), jnp.asarray(dspl(s)))
 
-    # RK4 integration
     X, out = jnp.asarray(frame0), [jnp.asarray(frame0)]
     for k in range(len(t) - 1):
         h = t[k + 1] - t[k]
-        pk, pk1, vk, vk1 = map(jnp.asarray, (p[k], p[k + 1], v[k], v[k + 1]))
-        pm, vm = 0.5 * (pk + pk1), 0.5 * (vk + vk1)
-        A0, Am, A1 = A_at(pk, vk), A_at(pm, vm), A_at(pk1, vk1)
+        A0, Am, A1 = A_at(t[k]), A_at(t[k] + h / 2), A_at(t[k + 1])
         k1 = A0 @ X
         k2 = Am @ (X + 0.5 * h * k1)
         k3 = Am @ (X + 0.5 * h * k2)
         k4 = A1 @ (X + h * k3)
         X = X + (h / 6.0) * (k1 + 2 * k2 + 2 * k3 + k4)
+        X = g_orthonormal(X, geo.metric(jnp.asarray(spl(t[k + 1]))))
         out.append(X)
     return jnp.stack(out)
-
 
 # ------------------------------------------------------------- submanifolds
 
@@ -269,68 +245,88 @@ def reduced_curvature(K, W):
     return W * np.linalg.eigvalsh(K) / np.pi ** 2
 
 
-def sector_jacobi(geo, S, path, t, W, rho, n_steps=20000, renorm_every=50):
+def sector_jacobi(geo, S, path, t, W, rho, n_steps=20000, renorm_every=10, K=None):
     """
     Integrate the sector Jacobi equation directly and locate conjugate points.
 
-        Xdd(t) + W K_rho(t) X(t) = 0,   X(0) = 0,  Xd(0) = I,
+        ddot{X}(t) + W K_rho(t) X(t) = 0,   X(0) = 0,  dot{X}(0) = I,
 
-    a matrix ODE with K_rho(t) in a parallel frame. Conjugate points are the zeros of det X(t) in (0, 1]; 
-    a conjugate point in (0, 1) means the protocol is not a local minimum of the excess work in the ambient 
-    space.
+    a matrix ODE with K_rho(t) in a parallel frame. 
 
-    Degenerate sectors: along a symmetric protocol K_rho = A_rho (x) I_{d_rho}, so for d_rho > 1 the d_rho 
-    copies oscillate identically and det X has zeros of even multiplicity, invisible to sign changes. The system
-    is therefore reduced to the m_rho-dimensional A_rho before integrating and each conjugate point reported with 
-    multiplicity d_rho. Implemented for m_rho == 1 (A_rho = tr K_rho / d_rho) or d_rho == 1 (no reduction).
+    Conditioning: where K_rho has eigenvalues of both signs, the columns of X grow at different rates, X becomes
+    ill-conditioned, and det X acquires spurious sign changes. To prevent this, the columns of [X; Xd] are re-orthonormalized
+    by QR every renorm_every steps, rescaling det X by a known factor, which is tracked, so the sign and size of det X are
+    unaffected. 
+
+    Degenerate sectors: along a symmetric protocol K_rho = A_rho (x) I_{d_rho} in a frame adapted to the irrep, so
+    det X = (det X_A)^{d_rho} and every conjugate point is a d_rho-fold zero, invisible to sign changes when d_rho
+    is even. Sectors with m_rho == 1 are reduced to the scalar A_rho = tr K_rho / d_rho, and each conjugate point
+    is reported with multiplicity d_rho; sectors with d_rho == 1 need no reduction.
+
+    Out of scope: sectors with d_rho > 1 and m_rho > 1 raise NotImplementedError. None occurs in the field-control
+    example of the paper (the E sector of the full simplex under D_4, with d = 2 and m = 3, would be one).
 
     W : the protocol's optimal excess work W_ex* (its constant squared speed).
+    K : optional precomputed K_rho(t) from K_along_path with parallel frames, to avoid recomputing the frames.
     Returns dict: t, K (N+1, d, d) the full block, ts, det_sign, det_logabs,
     conjugate (times), multiplicity (d_rho each), index (sum of multiplicities
     in (0, 1)), bound = pi / sqrt(W k_min) if k_min > 0 else inf (Sturm time).
     """
-    from scipy.interpolate import CubicSpline
+
     t = np.asarray(t)
-    frame = parallel_frames(geo, path, t, S)
-    K_full = K_along_path(geo, path, t, S, frame)[rho]
+    if K is None:                                   
+        K = K_along_path(geo, path, t, S, parallel_frames(geo, path, t, S))[rho]
+    K_full = np.asarray(K)
     d_rho, m_rho = int(S.d[rho]), int(S.m[rho])
+
     if d_rho == 1:
         K = K_full
     elif m_rho == 1:
         K = (np.trace(K_full, axis1=1, axis2=2) / d_rho)[:, None, None]
     else:
-        raise NotImplementedError("sector with d_rho > 1 and m_rho > 1: reduce K_rho to A_rho first")
+        raise NotImplementedError("sector with d_rho > 1 and m_rho > 1 is out of scope (see docstring)")
     d = K.shape[1]
 
-    Kspl = CubicSpline(t, K, axis=0)
-    h = (t[-1] - t[0]) / n_steps
-    X, Y = np.zeros((d, d)), np.eye(d)
-    log_shift = 0.0
+    Kspl = CubicSpline(t, K, axis=0) 
+    f = lambda s, X_, Y_: (Y_, -W * (Kspl(s) @ X_))  # RHS of the Jacobi equation written as a first-order system, with Y = \dot{X}
+    X, Y = np.zeros((d, d)), np.eye(d)       
+
+    h = (t[-1] - t[0]) / n_steps                     # RK4 step size
+    sign_R, log_R = 1.0, 0.0                         # sign and log|.| of the accumulated product of det R
     ts, sgn, lad = [t[0]], [0.0], [-np.inf]
+
     for i in range(n_steps):
+        # RK4step
         ti = t[0] + i * h
-        f = lambda s, X_, Y_: (Y_, -W * (Kspl(s) @ X_))
         k1X, k1Y = f(ti,         X,               Y)
         k2X, k2Y = f(ti + h / 2, X + h / 2 * k1X, Y + h / 2 * k1Y)
         k3X, k3Y = f(ti + h / 2, X + h / 2 * k2X, Y + h / 2 * k2Y)
         k4X, k4Y = f(ti + h,     X + h * k3X,     Y + h * k3Y)
         X = X + (h / 6) * (k1X + 2 * k2X + 2 * k3X + k4X)
         Y = Y + (h / 6) * (k1Y + 2 * k2Y + 2 * k3Y + k4Y)
-        if (i + 1) % renorm_every == 0:                 # rescale by a positive scalar: det sign untouched
-            s = np.linalg.norm(X)
-            if s > 1e8 or 0 < s < 1e-8:
-                X, Y = X / s, Y / s
-                log_shift += d * np.log(s)
-        s_, l_ = np.linalg.slogdet(X)
-        ts.append(ti + h); sgn.append(s_); lad.append(l_ + log_shift)
+
+        # record sign and log|det X| at this step before renormalization
+        s_, l_ = np.linalg.slogdet(X)    
+        ts.append(ti + h); sgn.append(sign_R * s_); lad.append(log_R + l_)
+
+        # Renormalize the columns of [X; Y] by QR decomposition
+        if (i + 1) % renorm_every == 0:       
+            Q, R = np.linalg.qr(np.vstack([X, Y]))
+            dR = np.diag(R)
+            sign_R *= np.prod(np.sign(dR)); log_R += np.sum(np.log(np.abs(dR)))
+            X, Y = Q[:d], Q[d:]
+
     ts, sgn, lad = np.array(ts), np.array(sgn), np.array(lad)
 
-    conj = []                                            # sign changes of det X, located by linear interpolation
+    # locate sign changes of det X by linear interpolation
+    conj = []                                            
     for i in range(2, len(ts)):
         if sgn[i - 1] != 0 and sgn[i] != 0 and sgn[i - 1] != sgn[i]:
             L = max(lad[i - 1], lad[i])
             f0, f1 = sgn[i - 1] * np.exp(lad[i - 1] - L), sgn[i] * np.exp(lad[i] - L)
             conj.append(ts[i - 1] + h * f0 / (f0 - f1))
+
+    # assemble and return outputs as dictionary
     mult = [d_rho] * len(conj)
     k_min = float(np.linalg.eigvalsh(K).min())
     bound = np.pi / np.sqrt(W * k_min) if k_min > 0 else np.inf

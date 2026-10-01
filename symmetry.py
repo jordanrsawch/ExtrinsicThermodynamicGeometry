@@ -83,7 +83,6 @@ class ColouredGraph:
             H.add_edge(u, v, colour=c)
         return H
 
-
 def from_edges(n, edges, colours=None):
     """ColouredGraph from an edge list; equal colour labels -> same colour.
 
@@ -146,20 +145,32 @@ def automorphisms(G):
     return S.automorphism_group(edge_labels=True)
 
 
+def level_sets(pi, tol=1e-9):
+    """Partition of the states into classes of equal occupation, compared in energy -log pi.
 
-def stabilizer(A, *pis, tol=1e-12):
+    Sorted energies are split wherever consecutive values differ by more than tol. Returns sorted lists of states.
+    """
+    E = -np.log(np.asarray(pi, float))
+    order = np.argsort(E, kind="stable")
+    breaks = np.flatnonzero(np.diff(E[order]) > tol) + 1
+    return [sorted(int(u) for u in block) for block in np.split(order, breaks)]
+
+
+def stabilizer(A, *pis, tol=1e-9):
     """Largest subgroup of A fixing every distribution in pis.
 
-    P_s pi = pi iff s preserves each level set {u : pi_u = c}, so the joint stabilizer is the intersection of the 
-    set-wise stabilizers of all level sets of all the pis.
+    P_s pi = pi iff s maps each level set {u : pi_u = c} onto itself, so the joint stabilizer is the intersection
+    of the set-wise stabilizers of all level sets of all the pis. Level sets are found in energy, -log pi
+    (see level_sets), so tol is a relative tolerance on the occupations.
     """
     H = A
     for pi in pis:
         pi = np.asarray(pi, float)
         assert pi.shape == (A.degree(),), "distribution has wrong length"
-        for c in np.unique(np.round(pi / tol)) * tol:            # distinct values of pi
-            level_set = [int(u) for u in np.flatnonzero(np.abs(pi - c) <= tol)]
-            H = A.subgroup(H.stabilizer(level_set, "OnSets").gens())
+        assert (pi > 0).all(), "distribution must lie in the open simplex"
+        for block in level_sets(pi, tol):
+            if len(block) < len(pi):                                  # the whole state set is fixed by every s
+                H = A.subgroup(H.stabilizer(block, "OnSets").gens())
     return H
 
 
@@ -245,18 +256,28 @@ class Sectors:
         self.Pi, self.U, dim, dd, mm, self.chi = [], [], [], [], [], []
 
         for irrep in sector_irreps:
-            # Build projector from the character table (Serre, Thm. 8), check that it is real and idempotent
+            # Character projector (Serre, Thm. 8). It is idempotent for any representation, but symmetric only
+            # when every rep(h) is orthogonal; for a non-orthonormal control basis B it is an oblique projector.
             P = sum((d[r] / order) * sum(chi[r, a].conjugate() * R[a] for a in range(len(classes)))
                     for r in irrep)
             assert np.abs(P.imag).max() < tol, "projector not real after pairing conjugates"
             P = P.real
             assert np.allclose(P @ P, P, atol=tol), "not a projector"
-            assert np.allclose(P, P.T, atol=tol)
-            P = 0.5 * (P + P.T)  # symmetrize to avoid numerical issues
 
-            # The sector is the 1-eigenspace of P 
-            w, V = np.linalg.eigh(P)
-            Ub = V[:, w > 0.5]
+            # The sector is the range of P. Its orthonormal basis is built by Gram-Schmidt on the projected standard basis 
+            # vectors P e_0, P e_1, ..., keeping those that enlarge the span. 
+            rank = int(round(np.trace(P)))
+            cols = []
+            for j in range(P.shape[1]):
+                if len(cols) == rank:
+                    break
+                v = P[:, j].copy()
+                for q in cols:
+                    v -= q * (q @ v)
+                if np.linalg.norm(v) > 1e-6:
+                    cols.append(v / np.linalg.norm(v))
+            assert len(cols) == rank, "could not build a basis of the sector"
+            Ub = np.stack(cols, axis=1) if cols else np.zeros((P.shape[0], 0))
 
             # Compute the multiplicity of the irrep in the representation from the character table (Serre, Thm. 4).
             mult = sum(np.sum(sizes * chi[r].conj() * traces) / order for r in irrep).real
@@ -268,6 +289,7 @@ class Sectors:
 
         self.dim, self.d, self.m = np.array(dim), np.array(dd), np.array(mm)
         assert self.dim.sum() == self.n, "sectors do not span the space"
+        assert np.allclose(sum(self.Pi), np.eye(self.n), atol=tol), "projectors do not resolve the identity"
 
         # Identify the invariant sector rho0 (the one with character 1 on all classes)
         rho0 = [i for i, g in enumerate(sector_irreps) if np.allclose(chi[g[0]], 1)]
