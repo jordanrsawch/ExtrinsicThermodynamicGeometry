@@ -4,20 +4,20 @@ Code supporting *Extrinsic thermodynamic geometry, symmetry, and the cost of con
 
 ## Files
 
-`symmetry.py` - Markov graph and its symmetries
+`symmetry.py` - Markov graph and its symmetries, including:
 - `ColouredGraph` : edge-coloured Markov graph. Attribute `.aut` is its automorphism group $\mathrm{Aut}(G)$
 - `stabilizer`, `orbits` : subgroup that fixes given distributions (e.g. the endpoints of a protocol), and the orbits of a group
 - `real_character_table` : real irreducible characters of a group, built from complex characters computed with GAP
 - `sector_projectors`, `sector_basis` : multiplicities $m_{\rho}$ of the sectors, the projectors $\Pi_{\rho}$, and a basis of each sector
 - `induced_representation` : action $S_{\sigma} = B^+ P_{\sigma} B$ of a group on control coordinates 
 
-`models.py` - Builds Markov models on ColouredGraph objects
+`models.py` - Builds Markov models on ColouredGraph objects, including:
 - `glauber`, `power_law` : example rate laws, given as functions $w(y)$ of $y = \pi_{\rm target} / \pi_{\rm source}$
 - `markov_graph`, `spin_system` : a Markov graph together with its rate laws, constructor for building spin systems 
-- `rate_matrix`, `laplacian` : $\mathbb{W}(pi)$ and $L(\pi)$ 
+- `rate_matrix`, `laplacian` : $\mathbb{W}(\pi)$ and $L(\pi)$ 
 - `equilibrium`, `chart_jacobian`, `coordinates` : $\pi(u) \propto \exp(\theta_0 + Bu)$ given $B$, $\theta_0$, $\mathbb{J} = \partial \pi / \partial u$, inverse of equilibrium chart ($\pi \to u$)
 
-`geometry.py` — thermodynamic geometry
+`geometry.py` — thermodynamic geometry, including:
 - `simplex_metric`, `control_set_metric` : the friction metric on the simplex and on a control set
 - `christoffel`, `riemann`, `curvature_form`, `second_fundamental_form` : connection and curvature, with the conventions of App. A of the paper
 - `parallel_frames`, `sector_curvature`, `scaled_curvature` : $\mathbb{K}_{\rho}(s)$ along a protocol, used in the thermodynamic comparison theorem and integration of the Jacobi equation
