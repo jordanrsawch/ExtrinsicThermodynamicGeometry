@@ -218,7 +218,7 @@ def print_sectors(title, sector_list, names):
 
 Below: the sectors of the four fields under the symmetry group of each control set. Each pattern is a perturbation of the fields, so `h0 - h1 - h2 + h3` corresponds to perturbations proportional to $(1,-1,-1,1)$ (increases the fields along one diagonal and decreases them along the other).
 
-For $M_h$, $\rho=1$ and $\rho=4$ correspond to the sectors $\mathcal{U}_1$ and $\mathcal{U}_2$ of the paper. The sectors are different for the submanifolds $M_\parallel$ and $M_\times$ fixed by smaller groups: the symmetric sector is two dimensional, leaving one symmetry-breaking sector with $m_\rho=2$ for $M_\parallel$ and two one-dimensional sectors for $M_\times$. 
+For $M_h$, $\rho=1$ and $\rho=4$ correspond to the sectors $\mathcal{U}\_1$ and $\mathcal{U}\_2$ of the paper. The sectors are different for the submanifolds $M_\parallel$ and $M_\times$ fixed by smaller groups: the symmetric sector is two dimensional, leaving one symmetry-breaking sector with $m_\rho=2$ for $M_\parallel$ and two one-dimensional sectors for $M_\times$. 
 
 A row with $m_\rho=0$ is an irrep of the group that does not occur among the fields.
 
