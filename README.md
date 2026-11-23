@@ -2,8 +2,6 @@
 
 Code supporting *Extrinsic thermodynamic geometry, symmetry, and the cost of constraint* (J.R. Sawchuk & D.A. Sivak). 
 
-Notation follows the paper: states $\mu \in \Omega$, equilibrium distribution $\pi$, Laplacian $L = -\mathbb{W}D_{\pi}$, and friction metric $L^+$. A control set is a family of distributions $\pi(u) \propto \exp(\theta_0 + Bu)$ with control coordinates $u$. A group $H$ of dynamical symmetries splits the perturbations of a symmetric protocol into sectors $\mathcal{U}_\rho$ with irrep dimension $d_{\rho}$ and multiplicity $m_{\rho}$, and each sector has curvature operator $\mathbb{K}_\rho$. Number of states in code is `n`, which the paper writes as $n+1$.  
-
 ## Files
 
 `symmetry.py` - Markov graph and its symmetries
@@ -314,10 +312,6 @@ for name, partition in partitions.items():
     same_group = protocol_group.order() == groups[name].order() and protocol_group.is_subgroup(groups[name])
     print(f"{name:6s} W* = {protocols[name]['W']:6.1f}   symmetry group {protocol_group.structure_description():8s}")
 ```
-
-    /var/folders/vt/dk1_7_cj7nn5lqzp5h5_0ptr0000gn/T/ipykernel_57088/25869787.py:1: DeprecationWarning: numpy.core.numeric is deprecated and has been renamed to numpy._core.numeric. The numpy._core namespace contains private NumPy internals and its use is discouraged, as NumPy internals can change without warning in any release. In practice, most real-world usage of numpy.core is to access functionality in the public NumPy API. If that is the case, use the public NumPy API. If not, you are using NumPy internals. If you would still like to access an internal attribute, use numpy._core.numeric._frombuffer.
-      data = pickle.load(open("fourSpinData/allProtocols.pkl", "rb"))
-
 
     M_h    W* =  183.9   symmetry group D4      
     M_par  W* =   83.7   symmetry group C2      
