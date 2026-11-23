@@ -55,7 +55,7 @@ from geometry import *
 
 `spin_system(4)` builds the Markov graph of four spins with single spin-flip Glauber dynamics (rate law $w(y) = y/(1+y)$ with $y = \pi_{\rm target} / \pi_{\rm source}$). Its 16 states are the spin configurations, and the graph is the four-dimensional hypercube.
 
-`G.aut` returns the automorphism group of the Markov graph with its edges coloured by rate law $\mathrm{Aut}(G)$ as a permutation group on the state indices. Here every edge has the same colour, and the group has $4!\,2^4 = 384$ elements, the signed permutations of four elements.
+`G.aut` returns the automorphism group of the Markov graph with its edges coloured by rate law $\mathrm{Aut}(G)$ as a permutation group on the state indices. Here every edge has the same colour, and the group has $4!\times 2^4 = 384$ elements, the signed permutations of four elements.
 
 
 ```python
