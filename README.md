@@ -320,14 +320,14 @@ for name, partition in partitions.items():
 
 #### Comparison theorem and conjugate points
 
-* `control_set_metric` returns the friction tensor on $M_{h_i}$ as a function of the fields
+* `control_set_metric` returns the friction tensor on $M\_{h_i}$ as a function of the fields
 * `parallel_frames` builds an orthonormal frame of the sector at $t=0$ and parallel transports it along the protocol
-* `sector_curvature` evaluates the sector curvature operator $\mathbb{K}_\rho(t)$ in that frame
-* `scaled_curvature` returns the eigenvalues of $\mathbb{K}_\rho(t)$ multiplied by $\mathscr{W}^\star/\pi^2$ 
-* `jacobi_determinant` integrates the sector Jacobi equation $\ddot{x} + \mathscr{W}^\star\mathbb{K}_\rho(t)\,x = 0$ 
+* `sector_curvature` evaluates the sector curvature operator $\mathbb{K}\_\rho(t)$ in that frame
+* `scaled_curvature` returns the eigenvalues of $\mathbb{K}\_\rho(t)$ multiplied by $\mathscr{W}^\star/\pi^2$ 
+* `jacobi_determinant` integrates the sector Jacobi equation $\ddot{x} + \mathscr{W}^\star\mathbb{K}\_\rho(t)\,x = 0$ 
 * `conjugate_points` returns the times at which the Jacobi determinant changes sign 
 
-For a sector with $d_\rho > 1$ and $m_\rho = 1$, $\mathbb{K}_\rho$ is a multiple of the identity. `reduce_sector_curvature` reduces it to that single number, and each conjugate point then counts $d_\rho$ times.
+For a sector with $d\_\rho > 1$ and $m\_\rho = 1$, $\mathbb{K}\_\rho$ is a multiple of the identity. `reduce_sector_curvature` reduces it to that single number, and each conjugate point then counts $d\_\rho$ times.
 
 
 ```python
@@ -457,7 +457,7 @@ plt.show()
 
 Two direct confirmations of the symmetry results above.
 
-**Second fundamental form.** `second_fundamental_form(metric_M, metric_ambient, embedding, u)` evaluates $\mathrm{I\!I}$ of a submanifold $M$ in an ambient manifold at the coordinates $u$ of $M$; `embedding` maps $u$ to the ambient coordinates of the same point. $\mathrm{I\!I} \equiv 0$ if and only if $M$ is totally geodesic. 
+**Second fundamental form.** `second_fundamental_form(metric_M, metric_ambient, embedding, u)` evaluates $\mathrm{I\negthinspace I}$ of a submanifold $M$ in an ambient manifold at the coordinates $u$ of $M$; `embedding` maps $u$ to the ambient coordinates of the same point. $\mathrm{I\negthinspace I} \equiv 0$ if and only if $M$ is totally geodesic. 
 
 
 ```python
@@ -484,7 +484,7 @@ for name, partition in partitions.items():
     M_x   u = [-0.3  0.5]:  max |II| in M_hi = 3.5e-11,  in Delta^15 = 10.262
 
 
-**Block-diagonalization of the friction tensor.** At a point of $M_h$, the friction tensor $\zeta$ on $M_{h_i}$ is invariant under the induced action of $\mathrm{Aut}(G, M_h) \cong D_4$, so in a sector basis it is block diagonal. Below, $\zeta$ is shown in the field coordinates $h_0,\dots,h_3$ (top) and in the sector basis (bottom) at three points of $M_h$ and at one point off it. Shading is by $\log |\zeta_{ij}|$. 
+**Block-diagonalization of the friction tensor.** At a point of $M_h$, the friction tensor $\zeta$ on $M\_{h_i}$ is invariant under the induced action of $\mathrm{Aut}(G, M_h) \cong D_4$, so in a sector basis it is block diagonal. Below, $\zeta$ is shown in the field coordinates $h_0,\dots,h_3$ (top) and in the sector basis (bottom) at three points of $M_h$ and at one point off it. Shading is by $\log |\zeta_{ij}|$. 
 
 
 ```python
