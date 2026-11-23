@@ -37,7 +37,7 @@ The example below also requires Pandas to read the optimal protocols of the four
 
 ## Example: field control of four spins
 
-The remainder of this notebook reproduces the field-control example of the paper. The task is to reverse the magnetization of four Ising spins on a $2 \times 2$ grid with Glauber dynamics.
+We reproduce the field-control example of the paper. The task is to reverse the magnetization of four Ising spins on a $2 \times 2$ grid with Glauber dynamics.
 
 
 ```python
