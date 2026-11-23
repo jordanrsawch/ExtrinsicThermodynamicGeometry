@@ -1,20 +1,7 @@
-"""symmetry.py — edge-coloured Markov graphs, their automorphism groups, and
-the isotypic (sector) decomposition of R^n under a subgroup.
+"""symmetry.py - edge-coloured Markov graphs, their automorphim groups, and 
+the isotypic (sector) decomposition under a subgroup.
 
-Objects and conventions
-  * G = (Omega, E, C): states 0..n-1, edges, edge colouring. Colours group
-    edges that share a rate law; colour 0 marks a non-edge.
-  * Aut(G): permutations s of states with C[s(u), s(v)] == C[u, v]. Held as a
-    Sage PermutationGroup whose domain is the state set, so elements are
-    0-indexed; as_tuple(g,n) gives s with s[u] the image of u.
-  * P_s: permutation matrix acting on distributions, (P_s pi)_{s(u)} = pi_u.
-  * H <= Aut(G): the subgroup fixing the endpoint distributions. M_H is the
-    fixed manifold, of dimension (#orbits of H) - 1.
-  * Sectors: R^n = U_0 (+) sum_{rho != 0} U_rho, the isotypic decomposition
-    of the permutation representation of H; U_0 = tangent directions of M_H
-    (plus the normalisation), the U_rho are the symmetry-breaking sectors.
-
-Group theory is delegated to Sage/GAP 
+Group theory delegated to Sage/GAP. 
 """
 
 from dataclasses import dataclass, field
@@ -22,361 +9,324 @@ from functools import cached_property
 import numpy as np
 import networkx as nx
 import matplotlib.pyplot as plt
-import sage.all__sagemath_graphs  
-from sage.graphs.graph import Graph as SageGraph
+import sage.all__sagemath_graphs
+from sage.graphs.digraph import DiGraph as SageDiGraph
 from sage.groups.perm_gps.permgroup import PermutationGroup_generic
 from copy import copy
 
-
-# ============================================================ coloured graphs
-
-@dataclass(frozen=True)
+# ============ coloured graphs =============
+@dataclass(frozen = True)
 class ColouredGraph:
-    """Edge-coloured Markov graph.
+    """ Edge-coloured Markov digraph. 
+    
+    Each ordered pair of adjacent states (mu, nu) carries a colour colour[mu, nu]
+    that stands for the rate law of the transition nu -> mu. 
 
+    Under detailed balance, each edge carries only a single independent colour, as the
+    rate law of the reverse transition is determined by the forward transition and the
+    stationary distribution. Each edge is therefore one of two kinds:
+        * undirected edges, with colour[mu, nu] = colour[nu, mu] (conductance is symmetric)
+        * directed edges, with colour[mu, nu] != colour[nu, mu] (conductance is asymmetric)
+    
     Attributes
     ----------
     n : int
-        Number of states |Omega|.
+        Number of states (vertices) in the graph.
     colour : np.ndarray, shape (n, n), dtype int
-        Symmetric colour matrix; colour[u, v] == 0 is a non-edge, c >= 1 is an
-        edge of colour c. Zero diagonal.
+        Colour matrix, zero on the diagonal and for non-adjacent states. 
     labels : n-tuple of str, optional
-        State labels for plotting, e.g. spin configurations.
+        Labels for the states (vertices) of the graph. If not provided, defaults to 
+        string representations of the integers 0, 1, ..., n-1.
+    
     """
     n: int
     colour: np.ndarray
     labels: tuple = None
+    laws: dict = None       # {colour: rate law w(y)}, set by models2.markov_graph; None for a bare graph
 
+    # Conditions on colour matrix and labels
     def __post_init__(self):
         C = self.colour
-        assert C.shape == (self.n, self.n), "colour matrix has wrong shape"
-        assert (C == C.T).all(), "colour matrix must be symmetric"
-        assert (np.diag(C) == 0).all(), "no self-loops"
-        assert (C >= 0).all() and np.issubdtype(C.dtype, np.integer)
-        assert self.labels is None or len(self.labels) == self.n, "labels must match n"
+        assert C.shape == (self.n, self.n), "Colour matrix must be square with shape (n, n)"
+        assert np.issubdtype(C.dtype, np.integer) and (C >= 0).all(), "Colour matrix must be non-negative integers"
+        assert (np.diag(C) == 0).all(), "No self-loops allowed: diagonal of colour matrix must be zero"
+        assert ((C > 0) == (C > 0).T).all(), "All transitions must be reversible" 
+        for c in np.unique(C[C > 0]):
+            assert len(np.unique(C.T[C == c])) == 1, f"Transitions of colour {c} have reverses of different colours"
+        assert self.labels is None or len(self.labels) == self.n, "Wrong number of labels provided"
 
+    # Basic properties
+    @property
+    def is_directed(self):
+        """Check if the graph is directed. True if some rate lawdepends on the direction of its transition."""
+        return bool((self.colour != self.colour.T).any())
+    @property
+    def arcs(self):
+        """ List of directed edges (arcs) together with their colours.""" 
+        C = self.colour 
+        return [(mu, nu, int(C[mu,nu])) for mu in range(self.n) for nu in range(self.n) if C[mu, nu] > 0]
     @property
     def edges(self):
-        """List of (u, v, colour) with u < v."""
-        return [(u, v, int(self.colour[u, v]))
-                for u in range(self.n) for v in range(u + 1, self.n)
-                if self.colour[u, v] > 0]
+        """ Every adjacent pair of states, with the colour of directed edges taken to be the ordering (mu, nu)
+            with the smaller colour."""
+        C = self.colour
+        def listed(mu, nu):
+            return C[mu, nu] < C[nu, mu] or (C[mu, nu] == C[nu, mu] and mu < nu)
+        return [(mu, nu, int(C[mu, nu])) for mu in range(self.n) for nu in range(self.n) 
+                if C[mu, nu] > 0 and listed(mu, nu)]
 
     # Memoized group data
     @cached_property
     def aut(self):
-        """Aut(G) as a Sage PermutationGroup on {0, ..., n-1}."""
+        """Aut(G) as a Sage Permutation group on {0, 1, ..., n-1}."""
         return automorphisms(self)
-
     @cached_property
     def orbits(self):
-        """Vertex orbits of the full automorphism group."""
+        """Orbits of the full automorphism group."""
         return orbits(self.aut)
 
+    # Convert to networkx graph
     def to_nx(self):
-        """nx.Graph with edge attribute 'colour' and node attribute 'label' (plotting only)."""
-        H = nx.Graph()
-        for v in range(self.n):
-            H.add_node(v, label=self.labels[v] if self.labels else str(v))
-        for u, v, c in self.edges:
-            H.add_edge(u, v, colour=c)
-        return H
+        """nx.DiGraph with one arc per entry of `edges'. Used for plotting."""
+        graph = nx.DiGraph()
+        for mu in range(self.n):
+            graph.add_node(mu, label = self.labels[mu] if self.labels is not None else str(mu))
+        for mu, nu, c in self.edges:
+            graph.add_edge(nu, mu, colour = c, directed = bool(self.colour[nu, mu] != c))
+        return graph
 
-def from_edges(n, edges, colours=None):
-    """ColouredGraph from an edge list; equal colour labels -> same colour.
 
-    Colour ids are assigned 1, 2, ... in order of first appearance. Default
-    None gives the trivial colouring (all colour 1).
-    """
+# Simple constructor functions for ColouredGraph objects
+def from_edges(n, edges, colours = None, labels = None):
+    """Undirected ColouredGraph from an edge list.
+    
+    Colour ids are assigned 1, 2, ... in order of first appearance. Default None
+    gives trivial colouring (C[mu, nu] = 1 for all edges)."""
     if colours is None:
-        colours = [0] * len(edges)
-    assert len(colours) == len(edges), "need one colour label per edge"
+        colours = [1] * len(edges)
+    assert len(colours) == len(edges), "Number of colours must match number of edges"
     ids = {}
     C = np.zeros((n, n), dtype=int)
-    for (u, v), lab in zip(edges, colours):
-        assert u != v, "no self-loops"
-        C[u, v] = C[v, u] = ids.setdefault(lab, len(ids) + 1)
-    return ColouredGraph(n=n, colour=C)
+    for (mu, nu), lab in zip(edges, colours):
+        assert mu != nu, "No self-loops allowed"
+        C[mu, nu] = C[nu, mu] = ids.setdefault(lab, len(ids) + 1)
+    return ColouredGraph(n=n, colour=C, labels=labels)
 
+# ============ basic group functions =============
 
-def cycle(n, colour_pattern=None):
-    """n-cycle 0-1-...-(n-1)-0; edge i = (i, i+1 mod n) has colour_pattern[i % len].
+def as_tuple(g, n):
+    """Convert Sage permutation g to a tuples s, with s[u] the image of u."""
+    return tuple(int(g(u)) for u in range(n))
 
-    cycle(6, ['chem', 'mech']) is the alternating six-cycle ring example
-    """
-    edges = [(i, (i + 1) % n) for i in range(n)]
-    pat = colour_pattern or [0]
-    return from_edges(n, edges, [pat[i % len(pat)] for i in range(n)])
+def elements(H):
+    """Elements of Sage group H as 0-indexed tuples."""
+    n = H.degree()
+    return sorted(as_tuple(g, n) for g in H)
 
-
-# ================================================================ group functions
+def orbits(H):
+    """Orbits of sage group H as a list of lists of integers."""
+    return sorted(sorted(int(i) for i in orb) for orb in H.orbits())
 
 def perm_matrix(s):
-    """Permutation matrix P_s for permutation s, acting as (P_s pi)_{s(u)} = pi_u"""
+    """Permutation matrixfor permutation s."""
     s = list(s); n = len(s)
     P = np.zeros((n, n))
     P[s, range(n)] = 1.0
     return P
 
-
-def as_tuple(g, n):
-    """Convert Sage permutation to tuple s, with s[u] the image of u."""
-    return tuple(int(g(u)) for u in range(n))
-
-
-def elements(H):
-    """Elements of H as 0-indexed tuples, sorted (identity first)."""
-    n = H.degree()
-    return sorted(as_tuple(g, n) for g in H)
-
-def permutation_matrices(H):
-    """Permutation matrices P_s for all s in H, sorted (identity first)."""
+def perm_matrices(H):
+    """Permutation matrices for all elements of Sage group H."""
     return [perm_matrix(s) for s in elements(H)]
 
+def cycle_notation(s):
+    """Permutation tuple s (s[mu] = image of mu) in cycle notation."""
+    cycles, seen = [], set()
+    for start in range(len(s)):
+        if start in seen or s[start] == start:
+            continue
+        cycle, mu = [], start
+        while mu not in seen:
+            seen.add(mu); cycle.append(mu); mu = s[mu]
+        cycles.append("(" + " ".join(str(mu) for mu in cycle) + ")")
+    return "".join(cycles) or "id"
 
 def automorphisms(G):
-    """Aut(G): colour-preserving automorphisms as a Sage PermutationGroup.
+    """Automorphism group of ColouredGraph G as a Sage PermutationGroup using Sage's built-in
+    functions. Computed as the automorphism group of the digraph with edges (mu, nu) labelelled 
+    by colour."""
+    digraph = SageDiGraph(G.n) 
+    digraph.add_edges(G.arcs) 
+    return digraph.automorphism_group(edge_labels=True)
 
-    Use Sage's built-in functions: A.order(), A.orbits(), A.stabilizer(...), A.character_table(), ...
-    """
-    S = SageGraph(G.n)                        # vertices 0..n-1 first, so the domain is the state set
-    S.add_edges(G.edges)                       # (u, v, colour): colour becomes the edge label
-    return S.automorphism_group(edge_labels=True)
-
-
-def level_sets(pi, tol=1e-9):
-    """Partition of the states into classes of equal occupation, compared in energy -log pi.
-
-    Sorted energies are split wherever consecutive values differ by more than tol. Returns sorted lists of states.
-    """
-    E = -np.log(np.asarray(pi, float))
-    order = np.argsort(E, kind="stable")
-    breaks = np.flatnonzero(np.diff(E[order]) > tol) + 1
-    return [sorted(int(u) for u in block) for block in np.split(order, breaks)]
-
-
-def stabilizer(A, *pis, tol=1e-9):
-    """Largest subgroup of A fixing every distribution in pis.
-
-    P_s pi = pi iff s maps each level set {u : pi_u = c} onto itself, so the joint stabilizer is the intersection
-    of the set-wise stabilizers of all level sets of all the pis. Level sets are found in energy, -log pi
-    (see level_sets), so tol is a relative tolerance on the occupations.
-    """
-    H = A
+def stabilizer(H, *pis, tol = 1E-9):
+    """Largest subgroup of H fixing every distribution in pis."""
+    H_out = H
     for pi in pis:
         pi = np.asarray(pi, float)
-        assert pi.shape == (A.degree(),), "distribution has wrong length"
-        assert (pi > 0).all(), "distribution must lie in the open simplex"
-        for block in level_sets(pi, tol):
-            if len(block) < len(pi):                                  # the whole state set is fixed by every s
-                H = A.subgroup(H.stabilizer(block, "OnSets").gens())
-    return H
+        assert pi.shape == (H.degree(),), "Distribution has wrong shape"
+        assert (pi > 0).all(), "Distribution must lie in the interior of the simplex"
+        V = -np.log(pi); breaks = np.flatnonzero(np.diff(V[np.argsort(V)]) > tol) + 1
+        level_sets = [sorted(int(u) for u in block) for block in np.split(np.argsort(V), breaks)] # sets of equal occupation
+        for block in level_sets:
+            # Check which elements of H_out fix the block setwise, rebuild group from those elements
+            H_out = H.subgroup(H_out.stabilizer(block, "OnSets").gens())
+    return H_out
 
+# ============ Character theory =============
 
-def orbits(H):
-    """Vertex orbits of H: sorted lists, ordered by smallest member."""
-    return sorted(sorted(int(i) for i in o) for o in H.orbits())
+def real_character_table(H, show=False):
+    """Real irreducible characters of Sage permutation group H, computed from its complex characters.
+    
+    Returns a dict with keys 'order', 'classes', 'chi', 'd', 'e', 'kind, 'chi_complex'."""
+    n, order = H.degree(), int(H.order())
 
+    # Conjugacy classes aslists of tuples, starting with identity class
+    classes = sorted(sorted(as_tuple(g, n) for g in classes) for classes in H.conjugacy_classes())
+    class_of = {s: a for a, cls in enumerate(classes) for s in cls}
+    sizes = np.array([len(cls) for cls in classes], dtype=int)
 
-def lumping_map(H):
-    """Lambda : R^n -> R^r, (Lambda pi)_a = sum_{u in O_a} pi_u; rows are orbit indicators.
+    # Complex irreducible characters from GAP, evaluated on one element for each conjugacy class. 
+    representatives = {class_of[as_tuple(g,n)]: g for g in H}
+    chi_complex = np.array([[complex(character(representatives[a])) for a in range(len(classes))]
+                             for character in H.irreducible_characters()])
 
-    Lambda^+ = Lambda^T diag(1/|O_a|) and Lambda^+ Lambda = Pi_0 (eq. Pi0);
-    ker Lambda = sum_{rho != 0} U_rho (eq. conormal). Returns (Lambda, orbits).
+    # Class containing sigma^2, for sigma in each class.         
+    square_class = [class_of[tuple(s[s[mu]] for mu in range(n))] for s in (cls[0] for cls in classes)]
+
+    rows, used = [], set()
+    for r, chi in enumerate(chi_complex):
+        if r in used:
+            continue
+        indicator = int(round((sizes * chi[square_class]).sum().real / order))
+        if indicator == 1:
+            chi_real, kind = chi, "real"
+        elif indicator == -1:
+            chi_real, kind = 2 * chi, "quaternionic"
+        else:
+            partner = next(q for q, other in enumerate(chi_complex) if q != r and np.allclose(other, chi.conj()))
+            used.add(partner)
+            chi_real, kind = chi + chi_complex[partner], "complex"
+        assert np.abs(chi_real.imag).max() < 1E-9, "Real character has nonzero imaginary part. That shouldn't happen..."
+        rows.append((chi_real.real, kind))
+
+    # Sort irreps: First trivial, then sort by dimension, then by character values.
+    rows.sort(key = lambda row: (not np.allclose(row[0], 1), row[0][0], tuple(-row[0])))
+    chi_real = np.array([row[0] for row in rows])
+    d = np.rint(chi_real[:,0]).astype(int)
+    e = np.rint((sizes * chi_real **2).sum(axis = 1) / order).astype(int)
+    assert (d ** 2 // e).sum() == order, "Sum of d^2 / e over the real irreps does not equal |H|. That shouldn't happen..."
+    table = {"order": order,                    # |H|
+             "classes": classes,                # conjugacy classes
+             "chi": chi_real,                   # real characters 
+             "d": d,                            # d[rho] = dimension of real irrep rho
+             "e": e,                            # e[rho] = 1, 2, or 4 dep on type of irrep
+             "kind": [row[1] for row in rows],  # 'real', 'complex', or 'quaternionic' 
+             "chi_complex": chi_complex         # complex characters from GAP
+             }
+
+    if show:
+        print_character_table(table)
+    return table
+
+def print_character_table(table):
+    """Print the conjugacy classes, the complex character table, and the real character table."""
+    classes, chi_complex = table["classes"], table["chi_complex"]
+    fmt = lambda x: f"{x.real:g}" if abs(x.imag) < 1E-9 else f"{x.real:.3g}{x.imag:+.3g}i"
+    width = max(6, max(len(fmt(x)) for x in chi_complex.ravel()) + 2)
+    header = "".join(f"{'C' + str(a):>{width}}" for a in range(len(classes)))
+    print(f"|H| = {table['order']}\n\nConjugacy classes")
+    for a, cls in enumerate(classes):
+        print(f"  C{a}: size {len(cls)}, representative {cycle_notation(cls[0])}")
+    print(f"\nComplex irreducible characters\n{'':>4}{header}")
+    for r, chi in enumerate(chi_complex):
+        print(f"{r:>4}" + "".join(f"{fmt(x):>{width}}" for x in chi))
+    print(f"\nReal irreducible characters\n{'rho':>4}{header}    d  e  type")
+    for rho, chi in enumerate(table["chi"]):
+        print(f"{rho:>4}" + "".join(f"{x:>{width}g}" for x in chi)
+              + f"    {table['d'][rho]}  {table['e'][rho]}  {table['kind'][rho]}")
+
+# ============ Sectors =============
+
+def sector_projectors(table, rep=None, tol=1e-9):
+    """Multiplicities m_rho and projectors Pi_rho of the sectors of a real representation of H.
+
+    table : dict from real_character_table(H).
+    rep   : dict {sigma: matrix}, with sigma a tuple as in table['classes'], giving the matrix that represents
+            each element of H. None gives the permutation matrices P_sigma (the representation on states).
+
+    Returns (m, Pi): m[rho] is the multiplicity of real irrep rho in the representation, and Pi[rho] the projector
+    onto its sector, of rank d_rho m_rho.
     """
-    orbs = orbits(H)
-    Lam = np.zeros((len(orbs), H.degree()))
-    for a, o in enumerate(orbs):
-        Lam[a, o] = 1.0
-    return Lam, orbs
+    if rep is None:
+        rep = {sigma: perm_matrix(sigma) for cls in table["classes"] for sigma in cls}
+    order, chi, d, e = table["order"], table["chi"], table["d"], table["e"]
 
+    m, Pi = [], []
+    for rho in range(len(chi)):
+        character_sum = sum(chi[rho, a] * rep[sigma] for a, cls in enumerate(table["classes"]) for sigma in cls)
+        m.append(np.trace(character_sum) / (e[rho] * order))
+        Pi.append(d[rho] / (e[rho] * order) * character_sum)
 
-# =================================================================== sectors
+    return np.rint(m).astype(int), Pi
 
-@dataclass
-class Sectors:
-    """Isotypic decomposition R^n = (+)_rho U_rho of a representation of H.
+def sector_basis(projector, tol=1e-8):
+    """Orthonormal basis of the sector onto which `projector` projects, as the columns of a matrix Q.
 
-        Pi_rho = (d_rho / |H|) sum_h conj(chi_rho(h)) rep(h)      (Serre, Thm. 8)
-        m_rho  = (1 / |H|)     sum_h conj(chi_rho(h)) tr rep(h)
-
-    with chi_rho from H's character table. Irreps with complex characters come in conjugate pairs; 
-    each pair is merged into one real sector of twice the dimension, so every Pi_rho is a real matrix.
-
-    Construct with Sectors(H) for the permutation representation on states, or Sectors(H, rep) with 
-    rep a dict {tuple: matrix} or callable tuple -> matrix, e.g. the induced representation on control coordinates. 
-    A sector with dim 0 is an irrep of H absent from rep (an inaccessible sector).
+    Gram-Schmidt on the projected coordinate vectors Pi e_0, Pi e_1, ...: each is made orthogonal to the basis
+    vectors found so far and is kept, normalized, if not annihilated. Loop stops when rank Pi = tr Pi basis 
+    vectors are found. 
     """
-    # Called
-    H: PermutationGroup_generic               
-    rep: object = None                          # None -> perm_matrix
-    tol: float = 1e-8
+    dimension = len(projector)
+    rank = int(round(np.trace(projector)))
+    basis = []
+    for i in range(dimension):
+        if len(basis) == rank:
+            break
+        vector = projector[:, i].copy()                      # Pi e_i
+        for q in basis:
+            vector -= (q @ vector) * q                       
+        if np.linalg.norm(vector) > tol:
+            basis.append(vector / np.linalg.norm(vector))
 
-    # derived
-    n: int = field(init=False)                  # dimension of the represented space
-    Pi: list = field(init=False)                # Pi[r]: projector onto U_r
-    U: list = field(init=False)                 # U[r]: orthonormal basis of U_r, shape (n, dim[r])
-    dim: np.ndarray = field(init=False)         # dim[r] = rank Pi[r] = d[r] * m[r]
-    d: np.ndarray = field(init=False)           # real irrep dimension
-    m: np.ndarray = field(init=False)           # multiplicity
-    chi: list = field(init=False)               # chi[r]: character on H.conjugacy_classes() (summed over a merged pair)
-    rho0: int = field(init=False)               # index of the invariant sector
-
-    def __post_init__(self):
-        H, tol = self.H, self.tol
-        rep = self.rep
-        if rep is None:
-            rep = perm_matrix
-        elif isinstance(rep, dict):
-            rep = rep.__getitem__
-
-        order, n = int(H.order()), H.degree()
-        classes = H.conjugacy_classes()
-        chi = np.array(H.character_table()).astype(complex)    # rows irreps, cols classes
-        d = chi[:, 0].real.round().astype(int)                 # first class is the identity
-        sizes = np.array([int(c.cardinality()) for c in classes])
-
-        # Build class sums and compute traces of rep(h) for h in each class
-        R = [sum(rep(as_tuple(g, n)) for g in c) for c in classes]
-        traces = np.array([np.trace(Ra) for Ra in R]) / sizes  # tr rep(h) for h in class a
-
-        # Merge conjugate pairs of irreps into single real sectors.
-        sector_irreps, seen = [], set()
-        for r in range(len(chi)):
-            if r in seen:
-                continue
-            partner = [q for q in range(len(chi)) if q != r and np.allclose(chi[q], chi[r].conj())]
-            grp = [r] + partner[:1]
-            seen.update(grp)
-            sector_irreps.append(grp)
-
-        # Build projectors and bases for each sector
-        self.n = R[0].shape[0]
-        self.Pi, self.U, dim, dd, mm, self.chi = [], [], [], [], [], []
-
-        for irrep in sector_irreps:
-            # Character projector (Serre, Thm. 8). It is idempotent for any representation, but symmetric only
-            # when every rep(h) is orthogonal; for a non-orthonormal control basis B it is an oblique projector.
-            P = sum((d[r] / order) * sum(chi[r, a].conjugate() * R[a] for a in range(len(classes)))
-                    for r in irrep)
-            assert np.abs(P.imag).max() < tol, "projector not real after pairing conjugates"
-            P = P.real
-            assert np.allclose(P @ P, P, atol=tol), "not a projector"
-
-            # The sector is the range of P. Its orthonormal basis is built by Gram-Schmidt on the projected standard basis 
-            # vectors P e_0, P e_1, ..., keeping those that enlarge the span. 
-            rank = int(round(np.trace(P)))
-            cols = []
-            for j in range(P.shape[1]):
-                if len(cols) == rank:
-                    break
-                v = P[:, j].copy()
-                for q in cols:
-                    v -= q * (q @ v)
-                if np.linalg.norm(v) > 1e-6:
-                    cols.append(v / np.linalg.norm(v))
-            assert len(cols) == rank, "could not build a basis of the sector"
-            Ub = np.stack(cols, axis=1) if cols else np.zeros((P.shape[0], 0))
-
-            # Compute the multiplicity of the irrep in the representation from the character table (Serre, Thm. 4).
-            mult = sum(np.sum(sizes * chi[r].conj() * traces) / order for r in irrep).real
-
-            # Populate the fields
-            self.Pi.append(P); self.U.append(Ub); dim.append(Ub.shape[1])
-            dd.append(int(d[irrep[0]]) * len(irrep)); mm.append(int(round(mult / len(irrep))))
-            self.chi.append(chi[irrep].sum(axis=0))
-
-        self.dim, self.d, self.m = np.array(dim), np.array(dd), np.array(mm)
-        assert self.dim.sum() == self.n, "sectors do not span the space"
-        assert np.allclose(sum(self.Pi), np.eye(self.n), atol=tol), "projectors do not resolve the identity"
-
-        # Identify the invariant sector rho0 (the one with character 1 on all classes)
-        rho0 = [i for i, g in enumerate(sector_irreps) if np.allclose(chi[g[0]], 1)]
-        assert len(rho0) == 1
-        self.rho0 = rho0[0]
-
-    @property
-    def breaking(self):
-        """Indices of the symmetry-breaking sectors rho != 0."""
-        return [r for r in range(len(self.Pi)) if r != self.rho0]
-
-    @property
-    def accessible(self):
-        return [r for r in self.breaking if self.dim[r] > 0]
-
-    @property
-    def inaccessible(self):
-        return [r for r in self.breaking if self.dim[r] == 0]
-
-    def normal_projector(self):
-        """Projector onto N_pi M_H = sum_{rho != 0} U_rho; constant in pi."""
-        return np.eye(self.n) - self.Pi[self.rho0]
-
-    def normal_basis(self):
-        """Orthonormal basis of N_pi M_H split into sectors: (B, sector index per column)."""
-        cols = [self.U[r] for r in self.accessible]
-        labels = np.concatenate([np.full(self.dim[r], r) for r in self.accessible])
-        return np.hstack(cols), labels
-
+    assert len(basis) == rank, "could not find a full basis of the sector"
+    return np.column_stack(basis) if basis else np.zeros((dimension, 0))
 
 def induced_representation(H, B, tol=1e-9):
-    """Restriction of the permutation representation of H to the subspace col(B).
+    """Action of the elements of H on the coordinates of a control set.
 
-    Use: the columns of B are the state-energy perturbations conjugate to the control coordinates
-    u of a control set M = {pi(u) : pi_mu ~ exp(-V_mu(u))}, V(u) = V_0 + Bu. B is assumed to have full
-    column rank (gauge-fixed). Sectors(H_B, rep=S) then gives the accessible and inaccessible sectors of M.
+    B[mu, i] = -d V_mu / d u_i is the (n, m) matrix of conjugate forces.
 
-    Parameters
-    ----------
-    H : Sage PermutationGroup on {0, ..., n-1}
-    B : (n, m) array of full column rank
-    tol : residual tolerance for membership of P_sigma B in col(B)
-
-    Returns
-    -------
-    S : dict {as_tuple(sigma): (m, m) array}
-    H_B : Sage PermutationGroup, the elements of H preserving col(B)
+    Returns S = {sigma: S_digma} a dictionary of matrices, H_B the subgroup of H whose elemnts preserve the
+    column space of B. 
     """
     B = np.asarray(B, float)
     n, m = B.shape
-    assert n == H.degree(), "B has wrong number of rows"
-    assert np.linalg.matrix_rank(B) == m, "B must have full column rank"
+    assert n == H.degree(), "B needs one row per state"
 
-    # S_sigma = B^+ P_sigma B, then those that preserve col(B) form the subgroup H_B
-    pinvB = np.linalg.pinv(B)
-    S, kept = {}, []
+    # A uniform shift of all state energies does not change pi, so only the zero-mean part of each column matters.
+    B = B - B.mean(axis=0)
+    assert np.linalg.matrix_rank(B) == m, "the control coordinates are redundant: B does not have full column rank"
+
+    B_pinv = np.linalg.pinv(B)
+    S, preserving = {}, []
     for g in H:
-        s = as_tuple(g, n)
-        PB = perm_matrix(s) @ B
-        Ss = pinvB @ PB
-        if np.abs(PB - B @ Ss).max() <= tol:          # col(B) preserved
-            S[s] = Ss
-            kept.append(g)
-    H_B = H if len(kept) == H.order() else H.subgroup(kept)
-
-    # Consistency: S_e = I, every S_sigma invertible, and S a homomorphism.
-    # Sage multiplies permutations left to right, (g*h)(u) = h(g(u)), while the
-    # matrices satisfy P_{g after h} = P_g P_h; so S[g] @ S[h] must equal S[h*g].
-    assert np.allclose(S[tuple(range(n))], np.eye(m), atol=tol), "S_e != I"
-    assert min(abs(np.linalg.det(M)) for M in S.values()) > tol, "singular S_sigma"
-    worst = max(np.abs(S[as_tuple(h * g, n)] - S[as_tuple(g, n)] @ S[as_tuple(h, n)]).max()
-                for g in H_B for h in H_B)
-    assert worst < tol, f"S is not a homomorphism (residual {worst:.2e}); is B gauge-fixed?"
-    return S, H_B
+        sigma = as_tuple(g, n)
+        permuted_B = perm_matrix(sigma) @ B
+        S_sigma = B_pinv @ permuted_B
+        if np.abs(permuted_B - B @ S_sigma).max() <= tol:        # P_sigma B = B S_sigma: column space preserved
+            S[sigma] = S_sigma
+            preserving.append(g)
+    return S, H.subgroup(preserving)
 
 
-# ================================================================== plotting
+def sectors(H, rep=None):
+    """Sectors of a real representation of H: one dict for each real irrep rho, with rho = 0 the symmetric sector.
 
-
-def plot_graph(G, pos=None, ax=None, cmap=plt.cm.tab10):
-    """Draw G with edges coloured by colour id. Returns (ax, pos) for reuse."""
-    Gnx = G.to_nx()
-    pos = pos or nx.kamada_kawai_layout(Gnx)
-    ax = ax or plt.gca()
-    edge_cols = [cmap((Gnx.edges[e]['colour'] - 1) % cmap.N) for e in Gnx.edges]
-    nx.draw_networkx_nodes(Gnx, pos, ax=ax, node_color='white', edgecolors='black', node_size=600)
-    nx.draw_networkx_labels(Gnx, pos, ax=ax, labels=nx.get_node_attributes(Gnx, 'label'))
-    nx.draw_networkx_edges(Gnx, pos, ax=ax, edge_color=edge_cols, width=2.5)
-    ax.set_axis_off()
-    return ax, pos
+    rep is a dict {sigma: matrix} as in sector_projectors; None gives the permutation matrices on the states.
+    Each dict has the irrep dimension 'd', its type 'e' (1, 2 or 4), the multiplicity 'm' of the irrep in the
+    representation, the 'projector' onto the sector, and an orthonormal 'basis' of it (d m columns).
+    """
+    table = real_character_table(H)
+    m, Pi = sector_projectors(table, rep)
+    return [{"d": int(table["d"][rho]), "e": int(table["e"][rho]), "m": int(m[rho]),
+             "projector": Pi[rho], "basis": sector_basis(Pi[rho])} for rho in range(len(m))]
